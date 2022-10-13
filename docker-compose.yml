@@ -1,0 +1,63 @@
+version: "3.7"
+services:
+  web:
+    image: nginx:1.23-alpine
+    hostname: web
+    environment:
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME}
+    depends_on:
+      - php
+      - db
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.typo3-basis.entrypoints=http"
+      - "traefik.http.routers.typo3-basis.rule=Host(`typo3-base.de`,`www.typo3-base.de`)"
+      - "traefik.http.routers.typo3-basis-secure.entrypoints=https"
+      - "traefik.http.routers.typo3-basis-secure.rule=Host(`typo3-base.de`,`www.typo3-base.de`)"
+      - "traefik.http.routers.typo3-basis-secure.middlewares=default@file"
+      - "traefik.http.routers.typo3-basis-secure.tls=true"
+      - "traefik.http.routers.typo3-basis-secure.tls.certresolver=http"
+      - "traefik.http.routers.typo3-basis-secure.service=typo3"
+      - "traefik.http.services.typo3.loadbalancer.server.port=80"
+      - "traefik.docker.network=proxy"
+    networks:
+      - proxy
+      - default
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./:/var/www/html
+      - ./Build/Docker/web/templates:/etc/nginx/templates:rw,cached
+      - ./Build/Docker/web/includes:/etc/nginx/includes:rw,cached
+  php:
+    build: ./Build/Docker/php/.
+    user: "1000:1000"
+    hostname: php
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./:/var/www/html
+      - ./Build/Docker/php/php.ini:/usr/local/etc/php/php.ini
+      - ./Build/Docker/php/log.conf:/usr/local/etc/php-fpm.d/zz-log.conf
+    networks:
+      - default
+  db:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8
+      - --collation-server=utf8_unicode_ci
+    environment:
+      - "MYSQL_USER=${DB_CONNECTION_DEFAULT_USER}"
+      - "MYSQL_PASSWORD=${DB_CONNECTION_DEFAULT_PASSWORD}"
+      - "MYSQL_DATABASE=${DB_CONNECTION_DEFAULT_DBNAME}"
+      - "MYSQL_RANDOM_ROOT_PASSWORD=yes"
+    hostname: db
+    restart: always
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./Database:/var/lib/mysql
+    networks:
+      - default
+networks:
+  proxy:
+    external: true
